@@ -43,6 +43,7 @@ local waypoints = {
     {Vector3.new(697.37, 27.11, -182.30), 0.01, false},
     {Vector3.new(727.39, 24.90, -221.17), 0.01, false},
     {Vector3.new(740.64, 20.49, -277.09), 0.01, false},
+    {Vector3.new(699.72, 34.09, -297.40), 0.01, false},
     {Vector3.new(678.81, 52.51, -317.05), 0.01, false},
     {Vector3.new(682.06, 80.56, -372.30), 0.01, false},
     {Vector3.new(677.09, 78.95, -381.96), nil, true},
@@ -54,7 +55,10 @@ local waypoints = {
     {Vector3.new(613.61, -6.25, -384.32), nil, true},
     {Vector3.new(557.05, 11.62, -393.43), 0.01, false},
     {Vector3.new(506.29, -4.67, -385.39), 0.01, false},
+    {Vector3.new(22.75, -3.11, -523.12), 0.01, false},
+    {Vector3.new(-65.09, -3.11, -527.69), 0.01, false},
     {Vector3.new(-79.71, 5.00, -533.88), 0.01, false},
+    {Vector3.new(-202.26, 6.74, -622.02), 0.01, false},
     {Vector3.new(-212.27, 25.33, -625.94), nil, true},
     {Vector3.new(-291.56, -39.85, -678.88), 0.01, false},
     {Vector3.new(-226.31, -38.97, -633.08), 0.01, false},
@@ -107,7 +111,7 @@ local waypoints = {
 
 local DEFAULT_SPEED = 16
 local currentSpeed = DEFAULT_SPEED
-local DEFAULT_LONG_WAIT = 5.6
+local DEFAULT_LONG_WAIT = 5.8
 local longWaitDuration = DEFAULT_LONG_WAIT
 local ARRIVE_THRESHOLD = 1.5
 
