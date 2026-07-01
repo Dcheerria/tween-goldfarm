@@ -1,13 +1,12 @@
 -- LocalScript, taruh di StarterPlayerScripts
--- Semua kontrol dikumpulin di 1 panel yang bisa di-collapse/expand lewat
--- 1 tombol menu (☰), jadi gak nutupin layar pas gak dipake.
+-- GUI dikumpulin di 1 panel collapsible (tombol ☰), ukuran dikecilin buat HP.
 --
 -- Fitur:
 --  - Path movement pakai BodyVelocity, mengikuti waypoint, loop terus.
---  - Speed custom.
---  - Long wait (titik yang tadinya 4s) durasinya custom, 1 input buat semua.
+--  - Speed custom, Long Wait custom.
 --  - Toggle "Show Next Point": beam + marker penunjuk arah ke titik berikutnya.
---  - Autoclicker: target reticle draggable, klik otomatis versi mobile (tap).
+--  - Autoclicker: toggle buka panel reticle+interval, tombol "Activate
+--    Autoclicker" terpisah buat start/stop klik-nya.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -106,24 +105,25 @@ local longWaitDuration = DEFAULT_LONG_WAIT
 local ARRIVE_THRESHOLD = 1.5
 
 local showIndicator = false
-local autoClickerOn = false
+local autoClickerPanelOpen = false
+local autoClickerActive = false
 local clickInterval = 0.1
 
 ----------------------------------------------------------------
--- ROOT GUI
+-- ROOT GUI (ukuran dikecilin buat mobile)
 ----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ControlPanelGui"
 screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Tombol menu utama (selalu keliatan, kecil, di pojok)
 local menuButton = Instance.new("TextButton")
 menuButton.Name = "MenuButton"
-menuButton.Size = UDim2.new(0, 50, 0, 50)
-menuButton.Position = UDim2.new(0, 20, 0, 20)
+menuButton.Size = UDim2.new(0, 34, 0, 34)
+menuButton.Position = UDim2.new(0, 10, 0, 10)
 menuButton.Text = "☰"
-menuButton.TextScaled = true
+menuButton.TextSize = 16
 menuButton.Font = Enum.Font.GothamBold
 menuButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 menuButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -134,12 +134,11 @@ local menuButtonCorner = Instance.new("UICorner")
 menuButtonCorner.CornerRadius = UDim.new(1, 0)
 menuButtonCorner.Parent = menuButton
 
--- Panel utama (collapsible), isi semua kontrol disusun vertikal
 local panel = Instance.new("Frame")
 panel.Name = "ControlPanel"
-panel.Size = UDim2.new(0, 260, 0, 0) -- tinggi diatur otomatis lewat UIListLayout + AutomaticSize
+panel.Size = UDim2.new(0, 170, 0, 0)
 panel.AutomaticSize = Enum.AutomaticSize.Y
-panel.Position = UDim2.new(0, 20, 0, 80)
+panel.Position = UDim2.new(0, 10, 0, 50)
 panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 panel.BackgroundTransparency = 0.15
 panel.Visible = false
@@ -147,19 +146,19 @@ panel.ZIndex = 90
 panel.Parent = screenGui
 
 local panelCorner = Instance.new("UICorner")
-panelCorner.CornerRadius = UDim.new(0, 10)
+panelCorner.CornerRadius = UDim.new(0, 8)
 panelCorner.Parent = panel
 
 local panelPadding = Instance.new("UIPadding")
-panelPadding.PaddingTop = UDim.new(0, 12)
-panelPadding.PaddingBottom = UDim.new(0, 12)
-panelPadding.PaddingLeft = UDim.new(0, 12)
-panelPadding.PaddingRight = UDim.new(0, 12)
+panelPadding.PaddingTop = UDim.new(0, 8)
+panelPadding.PaddingBottom = UDim.new(0, 8)
+panelPadding.PaddingLeft = UDim.new(0, 8)
+panelPadding.PaddingRight = UDim.new(0, 8)
 panelPadding.Parent = panel
 
 local panelLayout = Instance.new("UIListLayout")
 panelLayout.SortOrder = Enum.SortOrder.LayoutOrder
-panelLayout.Padding = UDim.new(0, 8)
+panelLayout.Padding = UDim.new(0, 5)
 panelLayout.Parent = panel
 
 menuButton.MouseButton1Click:Connect(function()
@@ -167,13 +166,16 @@ menuButton.MouseButton1Click:Connect(function()
 end)
 
 ----------------------------------------------------------------
--- Helper: bikin row generik di dalam panel
+-- Helper builders (versi kecil)
 ----------------------------------------------------------------
+local ROW_HEIGHT = 28
+local TEXT_SIZE = 12
+
 local function newButton(order, text, bgColor)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 42)
+    btn.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
     btn.Text = text
-    btn.TextScaled = true
+    btn.TextSize = TEXT_SIZE
     btn.Font = Enum.Font.GothamBold
     btn.BackgroundColor3 = bgColor
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -181,7 +183,7 @@ local function newButton(order, text, bgColor)
     btn.Parent = panel
 
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 8)
+    c.CornerRadius = UDim.new(0, 6)
     c.Parent = btn
 
     return btn
@@ -189,29 +191,30 @@ end
 
 local function newLabeledInput(order, labelText, defaultValue)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 42)
+    row.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
     row.BackgroundTransparency = 1
     row.LayoutOrder = order
     row.Parent = panel
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.55, -4, 1, 0)
+    label.Size = UDim2.new(0.58, -3, 1, 0)
     label.Text = labelText
-    label.TextScaled = true
+    label.TextSize = TEXT_SIZE
     label.Font = Enum.Font.Gotham
     label.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
     label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextXAlignment = Enum.TextXAlignment.Center
     label.Parent = row
 
     local labelCorner = Instance.new("UICorner")
-    labelCorner.CornerRadius = UDim.new(0, 8)
+    labelCorner.CornerRadius = UDim.new(0, 6)
     labelCorner.Parent = label
 
     local box = Instance.new("TextBox")
-    box.Size = UDim2.new(0.45, -4, 1, 0)
-    box.Position = UDim2.new(0.55, 4, 0, 0)
+    box.Size = UDim2.new(0.42, -3, 1, 0)
+    box.Position = UDim2.new(0.58, 3, 0, 0)
     box.Text = tostring(defaultValue)
-    box.TextScaled = true
+    box.TextSize = TEXT_SIZE
     box.Font = Enum.Font.GothamBold
     box.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
     box.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -219,7 +222,7 @@ local function newLabeledInput(order, labelText, defaultValue)
     box.Parent = row
 
     local boxCorner = Instance.new("UICorner")
-    boxCorner.CornerRadius = UDim.new(0, 8)
+    boxCorner.CornerRadius = UDim.new(0, 6)
     boxCorner.Parent = box
 
     return box
@@ -227,17 +230,18 @@ end
 
 local function newStatusLabel(order, defaultText)
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, 0, 0, 36)
+    lbl.Size = UDim2.new(1, 0, 0, 24)
     lbl.Text = defaultText
-    lbl.TextScaled = true
+    lbl.TextSize = 11
     lbl.Font = Enum.Font.Gotham
     lbl.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+    lbl.TextWrapped = true
     lbl.LayoutOrder = order
     lbl.Parent = panel
 
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 8)
+    c.CornerRadius = UDim.new(0, 6)
     c.Parent = lbl
 
     return lbl
@@ -250,10 +254,13 @@ local startButton = newButton(1, "Start Path", Color3.fromRGB(45, 45, 45))
 local speedBox = newLabeledInput(2, "Speed:", DEFAULT_SPEED)
 local longWaitBox = newLabeledInput(3, "Long Wait (s):", DEFAULT_LONG_WAIT)
 local indicatorToggle = newButton(4, "Show Next Point: OFF", Color3.fromRGB(80, 30, 30))
-local autoClickerToggle = newButton(5, "Autoclicker: OFF", Color3.fromRGB(80, 30, 30))
+
+local autoClickerPanelToggle = newButton(5, "Autoclicker Panel: OFF", Color3.fromRGB(60, 60, 30))
 local intervalBox = newLabeledInput(6, "Click Interval (s):", clickInterval)
-local clickCountLabel = newStatusLabel(7, "Clicks: 0")
-local statusLabel = newStatusLabel(8, "Status: Idle")
+local activateClickerButton = newButton(7, "Activate Autoclicker", Color3.fromRGB(80, 30, 30))
+local clickCountLabel = newStatusLabel(8, "Clicks: 0")
+
+local statusLabel = newStatusLabel(9, "Status: Idle")
 
 speedBox.FocusLost:Connect(function()
     local num = tonumber(speedBox.Text)
@@ -286,7 +293,7 @@ intervalBox.FocusLost:Connect(function()
 end)
 
 ----------------------------------------------------------------
--- NEXT-POINT INDICATOR (beam + marker) -- di luar panel, tampil di world
+-- NEXT-POINT INDICATOR (beam + marker) -- di world
 ----------------------------------------------------------------
 local indicatorFolder = Instance.new("Folder")
 indicatorFolder.Name = "PathIndicatorFolder"
@@ -350,12 +357,12 @@ indicatorToggle.MouseButton1Click:Connect(function()
 end)
 
 ----------------------------------------------------------------
--- AUTOCLICKER: target reticle draggable (di luar panel, biar bebas digeser)
+-- AUTOCLICKER: reticle draggable (di luar panel)
 ----------------------------------------------------------------
 local reticle = Instance.new("Frame")
 reticle.Name = "AutoClickTarget"
 reticle.AnchorPoint = Vector2.new(0.5, 0.5)
-reticle.Size = UDim2.new(0, 50, 0, 50)
+reticle.Size = UDim2.new(0, 40, 0, 40)
 reticle.Position = UDim2.new(0.5, 0, 0.5, 0)
 reticle.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
 reticle.BackgroundTransparency = 0.4
@@ -368,13 +375,14 @@ reticleCorner.CornerRadius = UDim.new(1, 0)
 reticleCorner.Parent = reticle
 
 local reticleStroke = Instance.new("UIStroke")
-reticleStroke.Thickness = 3
+reticleStroke.Thickness = 2
 reticleStroke.Color = Color3.fromRGB(255, 255, 255)
 reticleStroke.Parent = reticle
 
 local reticleDot = Instance.new("Frame")
-reticleDot.Size = UDim2.new(0, 8, 0, 8)
-reticleDot.Position = UDim2.new(0.5, -4, 0.5, -4)
+reticleDot.AnchorPoint = Vector2.new(0.5, 0.5)
+reticleDot.Size = UDim2.new(0, 6, 0, 6)
+reticleDot.Position = UDim2.new(0.5, 0, 0.5, 0)
 reticleDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 reticleDot.ZIndex = 96
 reticleDot.Parent = reticle
@@ -383,7 +391,7 @@ local reticleDotCorner = Instance.new("UICorner")
 reticleDotCorner.CornerRadius = UDim.new(1, 0)
 reticleDotCorner.Parent = reticleDot
 
--- Drag logic buat reticle (support mouse & touch)
+-- Drag logic (mouse & touch)
 local dragging = false
 local dragInput = nil
 local dragStart = nil
@@ -425,6 +433,23 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
+-- Toggle buka/tutup panel reticle+interval (cuma nampilin reticle, belum mulai klik)
+autoClickerPanelToggle.MouseButton1Click:Connect(function()
+    autoClickerPanelOpen = not autoClickerPanelOpen
+    autoClickerPanelToggle.Text = "Autoclicker Panel: " .. (autoClickerPanelOpen and "ON" or "OFF")
+    autoClickerPanelToggle.BackgroundColor3 = autoClickerPanelOpen
+        and Color3.fromRGB(90, 90, 30)
+        or Color3.fromRGB(60, 60, 30)
+    reticle.Visible = autoClickerPanelOpen
+
+    -- kalau panel ditutup sementara autoclicker masih aktif, matiin juga
+    if not autoClickerPanelOpen and autoClickerActive then
+        autoClickerActive = false
+        activateClickerButton.Text = "Activate Autoclicker"
+        activateClickerButton.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
+    end
+end)
+
 local autoClickRunId = 0
 local totalClicks = 0
 
@@ -434,27 +459,47 @@ local function getReticleScreenPosition()
     return absPos + absSize / 2
 end
 
+local function fireClickAt(pos)
+    -- kirim beberapa jenis event sekaligus biar peluang ke-detect lebih besar
+    -- (VirtualInputManager punya batasan; gak semua GuiButton pasti merespon)
+    local ok1 = pcall(function()
+        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+    end)
+    local ok2 = pcall(function()
+        VirtualInputManager:SendTouchTap(pos, false)
+    end)
+    return ok1 or ok2
+end
+
 local function runAutoClicker(thisRunId)
     totalClicks = 0
-    while autoClickerOn and thisRunId == autoClickRunId do
+    while autoClickerActive and thisRunId == autoClickRunId do
         local pos = getReticleScreenPosition()
-        VirtualInputManager:SendTouchTap(pos, false)
+        fireClickAt(pos)
         totalClicks += 1
         clickCountLabel.Text = "Clicks: " .. totalClicks
         task.wait(clickInterval)
     end
 end
 
-autoClickerToggle.MouseButton1Click:Connect(function()
-    autoClickerOn = not autoClickerOn
-    autoClickerToggle.Text = "Autoclicker: " .. (autoClickerOn and "ON" or "OFF")
-    autoClickerToggle.BackgroundColor3 = autoClickerOn
+-- Tombol Activate/Deactivate terpisah, di bawah panel reticle
+activateClickerButton.MouseButton1Click:Connect(function()
+    if not autoClickerPanelOpen then
+        -- belum buka panel reticle, otomatis buka dulu biar keliatan target-nya
+        autoClickerPanelOpen = true
+        autoClickerPanelToggle.Text = "Autoclicker Panel: ON"
+        autoClickerPanelToggle.BackgroundColor3 = Color3.fromRGB(90, 90, 30)
+        reticle.Visible = true
+    end
+
+    autoClickerActive = not autoClickerActive
+    activateClickerButton.Text = autoClickerActive and "Deactivate Autoclicker" or "Activate Autoclicker"
+    activateClickerButton.BackgroundColor3 = autoClickerActive
         and Color3.fromRGB(30, 90, 40)
         or Color3.fromRGB(80, 30, 30)
 
-    reticle.Visible = autoClickerOn
-
-    if autoClickerOn then
+    if autoClickerActive then
         autoClickRunId += 1
         task.spawn(runAutoClicker, autoClickRunId)
     else
