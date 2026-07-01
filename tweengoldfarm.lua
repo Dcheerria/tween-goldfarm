@@ -53,6 +53,7 @@ local waypoints = {
     {Vector3.new(636.71, -7.20, -375.39), nil, true},
     {Vector3.new(613.61, -6.25, -384.32), nil, true},
     {Vector3.new(557.05, 11.62, -393.43), 0.01, false},
+    {Vector3.new(506.29, -4.67, -385.39), 0.01, false},
     {Vector3.new(-79.71, 5.00, -533.88), 0.01, false},
     {Vector3.new(-212.27, 25.33, -625.94), nil, true},
     {Vector3.new(-291.56, -39.85, -678.88), 0.01, false},
@@ -106,7 +107,7 @@ local waypoints = {
 
 local DEFAULT_SPEED = 16
 local currentSpeed = DEFAULT_SPEED
-local DEFAULT_LONG_WAIT = 4.2
+local DEFAULT_LONG_WAIT = 5.6
 local longWaitDuration = DEFAULT_LONG_WAIT
 local ARRIVE_THRESHOLD = 1.5
 
@@ -299,38 +300,86 @@ intervalBox.FocusLost:Connect(function()
 end)
 
 ----------------------------------------------------------------
--- NEXT-POINT INDICATOR (beam + marker) -- di world
+-- NEXT-POINT INDICATOR (multi-segment beam) -- di world
+-- Beam "menekuk" ngikutin semua titik transit (0.01s) sampai nyampe
+-- ke titik LONG berikutnya, jadi keliatan bentuk jalurnya, bukan cuma
+-- garis lurus ke 1 titik doang.
 ----------------------------------------------------------------
 local indicatorFolder = Instance.new("Folder")
 indicatorFolder.Name = "PathIndicatorFolder"
 indicatorFolder.Parent = workspace
 
-local markerPart = Instance.new("Part")
-markerPart.Name = "NextPointMarker"
-markerPart.Shape = Enum.PartType.Ball
-markerPart.Size = Vector3.new(2, 2, 2)
-markerPart.Anchored = true
-markerPart.CanCollide = false
-markerPart.CanQuery = false
-markerPart.Material = Enum.Material.Neon
-markerPart.Color = Color3.fromRGB(255, 200, 0)
-markerPart.Transparency = 1
-markerPart.Parent = indicatorFolder
+local sourceAttachment = nil -- attachment di HRP, titik awal beam chain
 
-local markerAttachment = Instance.new("Attachment")
-markerAttachment.Parent = markerPart
+-- Pool marker + beam yang di-reuse (dibikin/dihapus sesuai kebutuhan)
+local markerPool = {} -- array of {part = Part, attachment = Attachment}
+local beamPool = {} -- array of Beam
 
-local sourceAttachment = nil
+-- Precompute: buat tiap index waypoint, index waypoint LONG berikutnya
+-- (termasuk dirinya sendiri kalau dia LONG), dengan wraparound ke awal list.
+local nextLongIndexFor = {}
+do
+    local n = #waypoints
+    local lastLongIndex = nil
+    -- cari index LONG pertama dari belakang buat handle wraparound
+    for i = n, 1, -1 do
+        if waypoints[i][3] then
+            lastLongIndex = i
+            break
+        end
+    end
+    local nextLong = lastLongIndex
+    for i = n, 1, -1 do
+        if waypoints[i][3] then
+            nextLong = i
+        end
+        nextLongIndexFor[i] = nextLong
+    end
+end
 
-local beam = Instance.new("Beam")
-beam.Name = "NextPointBeam"
-beam.Width0 = 0.4
-beam.Width1 = 0.15
-beam.Color = ColorSequence.new(Color3.fromRGB(255, 200, 0))
-beam.Transparency = NumberSequence.new(0.2)
-beam.FaceCamera = true
-beam.Enabled = false
-beam.Parent = markerPart
+local function getOrCreateMarker(idx)
+    if markerPool[idx] then
+        return markerPool[idx]
+    end
+
+    local part = Instance.new("Part")
+    part.Name = "PathBendMarker"
+    part.Shape = Enum.PartType.Ball
+    part.Size = Vector3.new(1.2, 1.2, 1.2)
+    part.Anchored = true
+    part.CanCollide = false
+    part.CanQuery = false
+    part.Material = Enum.Material.Neon
+    part.Color = Color3.fromRGB(255, 200, 0)
+    part.Transparency = 1
+    part.Parent = indicatorFolder
+
+    local attachment = Instance.new("Attachment")
+    attachment.Parent = part
+
+    local entry = {part = part, attachment = attachment}
+    markerPool[idx] = entry
+    return entry
+end
+
+local function getOrCreateBeam(idx)
+    if beamPool[idx] then
+        return beamPool[idx]
+    end
+
+    local beam = Instance.new("Beam")
+    beam.Name = "PathBendBeam"
+    beam.Width0 = 0.4
+    beam.Width1 = 0.15
+    beam.Color = ColorSequence.new(Color3.fromRGB(255, 200, 0))
+    beam.Transparency = NumberSequence.new(0.2)
+    beam.FaceCamera = true
+    beam.Enabled = false
+    beam.Parent = indicatorFolder
+
+    beamPool[idx] = beam
+    return beam
+end
 
 local function setupIndicatorForCharacter(hrp)
     if sourceAttachment then
@@ -339,18 +388,91 @@ local function setupIndicatorForCharacter(hrp)
     sourceAttachment = Instance.new("Attachment")
     sourceAttachment.Name = "PathIndicatorSource"
     sourceAttachment.Parent = hrp
-
-    beam.Attachment0 = sourceAttachment
-    beam.Attachment1 = markerAttachment
 end
 
-local function updateIndicatorTarget(targetPos)
-    markerPart.Position = targetPos
+-- Bangun ulang chain beam dari titik `fromIndex` sampai LONG berikutnya
+-- (inklusif), termasuk handle wraparound kalau LONG berikutnya ada di
+-- awal list lagi (path udah muter satu putaran penuh).
+local function updateIndicatorPath(fromIndex)
+    local n = #waypoints
+    local targetLongIndex = nextLongIndexFor[fromIndex]
+
+    -- kumpulin urutan index dari fromIndex sampai targetLongIndex (inklusif)
+    local pathIndices = {}
+    local i = fromIndex
+    while true do
+        table.insert(pathIndices, i)
+        if i == targetLongIndex then break end
+        i += 1
+        if i > n then i = 1 end
+        -- safety: kalau kepanjangan (harusnya gak mungkin), stop
+        if #pathIndices > n then break end
+    end
+
+    local segmentCount = #pathIndices
+
+    -- update/posisiin marker buat tiap titik di jalur ini
+    for k, wpIndex in ipairs(pathIndices) do
+        local marker = getOrCreateMarker(k)
+        marker.part.Position = waypoints[wpIndex][1]
+        -- titik terakhir (LONG) dikasih ukuran lebih gede biar kebeda
+        if k == segmentCount then
+            marker.part.Size = Vector3.new(2, 2, 2)
+        else
+            marker.part.Size = Vector3.new(1.2, 1.2, 1.2)
+        end
+    end
+
+    -- sembunyiin marker yang gak kepake (sisa dari path sebelumnya yang lebih panjang)
+    for k, entry in pairs(markerPool) do
+        if k > segmentCount then
+            entry.part.Transparency = 1
+        end
+    end
+
+    -- bikin beam chain: source(HRP) -> marker1 -> marker2 -> ... -> markerN
+    for k = 1, segmentCount do
+        local beam = getOrCreateBeam(k)
+        if k == 1 then
+            beam.Attachment0 = sourceAttachment
+        else
+            beam.Attachment0 = markerPool[k - 1].attachment
+        end
+        beam.Attachment1 = markerPool[k].attachment
+    end
+
+    -- matiin beam sisa yang gak kepake
+    for k, beam in pairs(beamPool) do
+        if k > segmentCount then
+            beam.Enabled = false
+        end
+    end
+
+    return segmentCount
 end
+
+local currentSegmentCount = 0
 
 local function setIndicatorVisible(visible)
-    beam.Enabled = visible
-    markerPart.Transparency = visible and 0.2 or 1
+    showIndicator = visible
+    for k, entry in pairs(markerPool) do
+        if k <= currentSegmentCount then
+            entry.part.Transparency = visible and 0.2 or 1
+        end
+    end
+    for k, beam in pairs(beamPool) do
+        if k <= currentSegmentCount then
+            beam.Enabled = visible
+        else
+            beam.Enabled = false
+        end
+    end
+end
+
+-- versi baru: dipanggil tiap pindah waypoint, terima INDEX bukan posisi
+local function updateIndicatorTarget(fromIndex)
+    currentSegmentCount = updateIndicatorPath(fromIndex)
+    setIndicatorVisible(showIndicator)
 end
 
 indicatorToggle.MouseButton1Click:Connect(function()
@@ -577,7 +699,7 @@ local function runPathLoop(thisRunId)
             local isLongWait = waypoint[3]
             local waitTime = isLongWait and longWaitDuration or fixedWait
 
-            updateIndicatorTarget(targetPos)
+            updateIndicatorTarget(i)
 
             statusLabel.Text = string.format("Menuju titik %d/%d", i, #waypoints)
             moveToPoint(hrp, targetPos, thisRunId)
