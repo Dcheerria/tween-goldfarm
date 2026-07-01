@@ -1,60 +1,62 @@
 -- LocalScript, taruh di StarterPlayerScripts
+-- Semua kontrol dikumpulin di 1 panel yang bisa di-collapse/expand lewat
+-- 1 tombol menu (☰), jadi gak nutupin layar pas gak dipake.
+--
 -- Fitur:
---  - Character digerakkan pakai BodyVelocity mengikuti waypoint (loop terus).
---  - Speed bisa di-custom lewat GUI.
---  - Titik-titik "long wait" (dulu 4s) durasinya bisa di-custom lewat 1 input,
---    gak perlu edit tiap titik manual.
---  - Toggle "Show Next Point": nyalain beam/garis penunjuk arah dari character
---    ke titik tujuan berikutnya, plus marker bola kecil di titik itu.
+--  - Path movement pakai BodyVelocity, mengikuti waypoint, loop terus.
+--  - Speed custom.
+--  - Long wait (titik yang tadinya 4s) durasinya custom, 1 input buat semua.
+--  - Toggle "Show Next Point": beam + marker penunjuk arah ke titik berikutnya.
+--  - Autoclicker: target reticle draggable, klik otomatis versi mobile (tap).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 
 ----------------------------------------------------------------
 -- WAYPOINTS: {Position, fixedWait or nil, isLongWait}
--- Kalau isLongWait == true, waitTime dipakai dari `longWaitDuration` (custom)
--- Kalau isLongWait == false, pakai fixedWait apa adanya
 ----------------------------------------------------------------
 local waypoints = {
-    {Vector3.new(-145.35, -34.47, -161.18), nil, true}, -- LONG WAIT (custom)
-    {Vector3.new(-109.24, -24.17, -187.50), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(-145.35, -34.47, -161.18), nil, true},
+    {Vector3.new(-109.24, -24.17, -187.50), nil, true},
     {Vector3.new(-128.69, -35.00, -183.10), 0.2, false},
     {Vector3.new(-141.02, -11.87, -188.26), 0.1, false},
-    {Vector3.new(-126.94, -7.79, -206.08), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(-126.94, -7.79, -206.08), nil, true},
     {Vector3.new(-126.00, -3.75, -215.39), 0.1, false},
     {Vector3.new(102.89, -3.00, -326.25), 0.1, false},
     {Vector3.new(186.08, -3.47, -233.67), 0.1, false},
     {Vector3.new(223.61, -3.00, -204.31), 0.1, false},
     {Vector3.new(411.89, -3.67, 128.87), 0.1, false},
     {Vector3.new(461.60, 16.56, 142.94), 0.1, false},
-    {Vector3.new(475.04, 12.85, 150.14), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(475.04, 12.85, 150.14), nil, true},
     {Vector3.new(504.06, 12.74, 188.21), 0.1, false},
-    {Vector3.new(470.37, 11.96, 235.59), nil, true}, -- LONG WAIT (custom)
-    {Vector3.new(663.29, 32.85, -186.40), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(470.37, 11.96, 235.59), nil, true},
+    {Vector3.new(663.29, 32.85, -186.40), nil, true},
     {Vector3.new(697.37, 27.11, -182.30), 0.2, false},
     {Vector3.new(727.39, 24.90, -221.17), 0.2, false},
     {Vector3.new(740.64, 20.49, -277.09), 0.2, false},
     {Vector3.new(678.81, 52.51, -317.05), 0.2, false},
     {Vector3.new(682.06, 80.56, -372.30), 0.2, false},
-    {Vector3.new(677.09, 78.95, -381.96), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(677.09, 78.95, -381.96), nil, true},
     {Vector3.new(633.86, 48.47, -357.08), 0.2, false},
     {Vector3.new(580.62, 13.45, -350.00), 0.2, false},
-    {Vector3.new(609.73, -6.18, -353.38), nil, true}, -- LONG WAIT (custom)
-    {Vector3.new(622.33, -6.21, -359.16), nil, true}, -- LONG WAIT (custom)
-    {Vector3.new(636.71, -7.20, -375.39), nil, true}, -- LONG WAIT (custom)
-    {Vector3.new(613.61, -6.25, -384.32), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(609.73, -6.18, -353.38), nil, true},
+    {Vector3.new(622.33, -6.21, -359.16), nil, true},
+    {Vector3.new(636.71, -7.20, -375.39), nil, true},
+    {Vector3.new(613.61, -6.25, -384.32), nil, true},
     {Vector3.new(557.05, 11.62, -393.43), 0.2, false},
     {Vector3.new(-79.71, 5.00, -533.88), 0.2, false},
-    {Vector3.new(-212.27, 25.33, -625.94), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(-212.27, 25.33, -625.94), nil, true},
     {Vector3.new(-291.56, -39.85, -678.88), 0.2, false},
     {Vector3.new(-226.31, -38.97, -633.08), 0.2, false},
     {Vector3.new(-149.40, -23.31, -563.70), 0.2, false},
     {Vector3.new(-118.20, -39.51, -611.25), 0.2, false},
     {Vector3.new(-146.85, -54.88, -631.76), 0.2, false},
     {Vector3.new(-177.84, -64.19, -608.29), 0.2, false},
-    {Vector3.new(-208.41, -61.63, -626.84), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(-208.41, -61.63, -626.84), nil, true},
     {Vector3.new(-177.84, -64.19, -608.29), 0.2, false},
     {Vector3.new(-158.42, -64.82, -591.58), 0.2, false},
     {Vector3.new(-175.88, -63.80, -553.14), 0.2, false},
@@ -64,8 +66,8 @@ local waypoints = {
     {Vector3.new(-50.10, -103.00, -430.36), 0.1, false},
     {Vector3.new(18.88, -99.85, -411.12), 0.1, false},
     {Vector3.new(25.49, -99.01, -373.50), 0.1, false},
-    {Vector3.new(37.75, -99.08, -370.12), nil, true}, -- LONG WAIT (custom)
-    {Vector3.new(56.27, -98.64, -358.45), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(37.75, -99.08, -370.12), nil, true},
+    {Vector3.new(56.27, -98.64, -358.45), nil, true},
     {Vector3.new(17.02, -98.66, -387.86), 0.1, false},
     {Vector3.new(18.76, -99.90, -416.97), 0.1, false},
     {Vector3.new(-87.45, -102.32, -431.01), 0.2, false},
@@ -73,11 +75,11 @@ local waypoints = {
     {Vector3.new(-112.94, -91.12, -279.20), 0.1, false},
     {Vector3.new(-153.35, -87.36, -257.07), 0.1, false},
     {Vector3.new(-224.83, -83.06, -259.45), 0.1, false},
-    {Vector3.new(-245.45, -82.74, -245.67), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(-245.45, -82.74, -245.67), nil, true},
     {Vector3.new(-224.83, -83.06, -259.45), 0.1, false},
     {Vector3.new(-245.03, -74.41, -297.54), 0.2, false},
     {Vector3.new(-252.99, -74.54, -314.63), 0.1, false},
-    {Vector3.new(-303.95, -75.70, -371.95), nil, true}, -- LONG WAIT (custom)
+    {Vector3.new(-303.95, -75.70, -371.95), nil, true},
     {Vector3.new(-252.99, -74.54, -314.63), 0.1, false},
     {Vector3.new(-245.03, -74.41, -297.54), 0.2, false},
     {Vector3.new(-224.83, -83.06, -259.45), 0.1, false},
@@ -103,67 +105,155 @@ local DEFAULT_LONG_WAIT = 4.2
 local longWaitDuration = DEFAULT_LONG_WAIT
 local ARRIVE_THRESHOLD = 1.5
 
-local showIndicator = false -- toggle state
-local autoClickerOn = false -- toggle state autoclicker
-local clickInterval = 0.1 -- detik antar klik (default 10 klik/detik)
+local showIndicator = false
+local autoClickerOn = false
+local clickInterval = 0.1
 
 ----------------------------------------------------------------
--- GUI
+-- ROOT GUI
 ----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "BodyVelocityPathGui"
+screenGui.Name = "ControlPanelGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Start/Stop button
-local button = Instance.new("TextButton")
-button.Name = "StartButton"
-button.Size = UDim2.new(0, 160, 0, 45)
-button.Position = UDim2.new(0, 20, 0, 20)
-button.Text = "Start Path"
-button.TextScaled = true
-button.Font = Enum.Font.GothamBold
-button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-button.TextColor3 = Color3.fromRGB(255, 255, 255)
-button.Parent = screenGui
+-- Tombol menu utama (selalu keliatan, kecil, di pojok)
+local menuButton = Instance.new("TextButton")
+menuButton.Name = "MenuButton"
+menuButton.Size = UDim2.new(0, 50, 0, 50)
+menuButton.Position = UDim2.new(0, 20, 0, 20)
+menuButton.Text = "☰"
+menuButton.TextScaled = true
+menuButton.Font = Enum.Font.GothamBold
+menuButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+menuButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+menuButton.ZIndex = 100
+menuButton.Parent = screenGui
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = button
+local menuButtonCorner = Instance.new("UICorner")
+menuButtonCorner.CornerRadius = UDim.new(1, 0)
+menuButtonCorner.Parent = menuButton
 
--- Speed input
-local speedLabel = Instance.new("TextLabel")
-speedLabel.Name = "SpeedCaption"
-speedLabel.Size = UDim2.new(0, 80, 0, 45)
-speedLabel.Position = UDim2.new(0, 190, 0, 20)
-speedLabel.Text = "Speed:"
-speedLabel.TextScaled = true
-speedLabel.Font = Enum.Font.Gotham
-speedLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-speedLabel.BackgroundTransparency = 0.3
-speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-speedLabel.Parent = screenGui
+-- Panel utama (collapsible), isi semua kontrol disusun vertikal
+local panel = Instance.new("Frame")
+panel.Name = "ControlPanel"
+panel.Size = UDim2.new(0, 260, 0, 0) -- tinggi diatur otomatis lewat UIListLayout + AutomaticSize
+panel.AutomaticSize = Enum.AutomaticSize.Y
+panel.Position = UDim2.new(0, 20, 0, 80)
+panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+panel.BackgroundTransparency = 0.15
+panel.Visible = false
+panel.ZIndex = 90
+panel.Parent = screenGui
 
-local cornerSpeedLabel = Instance.new("UICorner")
-cornerSpeedLabel.CornerRadius = UDim.new(0, 8)
-cornerSpeedLabel.Parent = speedLabel
+local panelCorner = Instance.new("UICorner")
+panelCorner.CornerRadius = UDim.new(0, 10)
+panelCorner.Parent = panel
 
-local speedBox = Instance.new("TextBox")
-speedBox.Name = "SpeedInput"
-speedBox.Size = UDim2.new(0, 70, 0, 45)
-speedBox.Position = UDim2.new(0, 280, 0, 20)
-speedBox.Text = tostring(DEFAULT_SPEED)
-speedBox.PlaceholderText = "16"
-speedBox.TextScaled = true
-speedBox.Font = Enum.Font.GothamBold
-speedBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-speedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-speedBox.ClearTextOnFocus = false
-speedBox.Parent = screenGui
+local panelPadding = Instance.new("UIPadding")
+panelPadding.PaddingTop = UDim.new(0, 12)
+panelPadding.PaddingBottom = UDim.new(0, 12)
+panelPadding.PaddingLeft = UDim.new(0, 12)
+panelPadding.PaddingRight = UDim.new(0, 12)
+panelPadding.Parent = panel
 
-local cornerSpeedBox = Instance.new("UICorner")
-cornerSpeedBox.CornerRadius = UDim.new(0, 8)
-cornerSpeedBox.Parent = speedBox
+local panelLayout = Instance.new("UIListLayout")
+panelLayout.SortOrder = Enum.SortOrder.LayoutOrder
+panelLayout.Padding = UDim.new(0, 8)
+panelLayout.Parent = panel
+
+menuButton.MouseButton1Click:Connect(function()
+    panel.Visible = not panel.Visible
+end)
+
+----------------------------------------------------------------
+-- Helper: bikin row generik di dalam panel
+----------------------------------------------------------------
+local function newButton(order, text, bgColor)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 42)
+    btn.Text = text
+    btn.TextScaled = true
+    btn.Font = Enum.Font.GothamBold
+    btn.BackgroundColor3 = bgColor
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.LayoutOrder = order
+    btn.Parent = panel
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 8)
+    c.Parent = btn
+
+    return btn
+end
+
+local function newLabeledInput(order, labelText, defaultValue)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 42)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = order
+    row.Parent = panel
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.55, -4, 1, 0)
+    label.Text = labelText
+    label.TextScaled = true
+    label.Font = Enum.Font.Gotham
+    label.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Parent = row
+
+    local labelCorner = Instance.new("UICorner")
+    labelCorner.CornerRadius = UDim.new(0, 8)
+    labelCorner.Parent = label
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0.45, -4, 1, 0)
+    box.Position = UDim2.new(0.55, 4, 0, 0)
+    box.Text = tostring(defaultValue)
+    box.TextScaled = true
+    box.Font = Enum.Font.GothamBold
+    box.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    box.TextColor3 = Color3.fromRGB(255, 255, 255)
+    box.ClearTextOnFocus = false
+    box.Parent = row
+
+    local boxCorner = Instance.new("UICorner")
+    boxCorner.CornerRadius = UDim.new(0, 8)
+    boxCorner.Parent = box
+
+    return box
+end
+
+local function newStatusLabel(order, defaultText)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 36)
+    lbl.Text = defaultText
+    lbl.TextScaled = true
+    lbl.Font = Enum.Font.Gotham
+    lbl.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+    lbl.LayoutOrder = order
+    lbl.Parent = panel
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 8)
+    c.Parent = lbl
+
+    return lbl
+end
+
+----------------------------------------------------------------
+-- ISI PANEL
+----------------------------------------------------------------
+local startButton = newButton(1, "Start Path", Color3.fromRGB(45, 45, 45))
+local speedBox = newLabeledInput(2, "Speed:", DEFAULT_SPEED)
+local longWaitBox = newLabeledInput(3, "Long Wait (s):", DEFAULT_LONG_WAIT)
+local indicatorToggle = newButton(4, "Show Next Point: OFF", Color3.fromRGB(80, 30, 30))
+local autoClickerToggle = newButton(5, "Autoclicker: OFF", Color3.fromRGB(80, 30, 30))
+local intervalBox = newLabeledInput(6, "Click Interval (s):", clickInterval)
+local clickCountLabel = newStatusLabel(7, "Clicks: 0")
+local statusLabel = newStatusLabel(8, "Status: Idle")
 
 speedBox.FocusLost:Connect(function()
     local num = tonumber(speedBox.Text)
@@ -175,40 +265,6 @@ speedBox.FocusLost:Connect(function()
     end
 end)
 
--- Long wait duration input
-local longWaitLabel = Instance.new("TextLabel")
-longWaitLabel.Name = "LongWaitCaption"
-longWaitLabel.Size = UDim2.new(0, 110, 0, 45)
-longWaitLabel.Position = UDim2.new(0, 360, 0, 20)
-longWaitLabel.Text = "Long Wait:"
-longWaitLabel.TextScaled = true
-longWaitLabel.Font = Enum.Font.Gotham
-longWaitLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-longWaitLabel.BackgroundTransparency = 0.3
-longWaitLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-longWaitLabel.Parent = screenGui
-
-local cornerLongWaitLabel = Instance.new("UICorner")
-cornerLongWaitLabel.CornerRadius = UDim.new(0, 8)
-cornerLongWaitLabel.Parent = longWaitLabel
-
-local longWaitBox = Instance.new("TextBox")
-longWaitBox.Name = "LongWaitInput"
-longWaitBox.Size = UDim2.new(0, 70, 0, 45)
-longWaitBox.Position = UDim2.new(0, 480, 0, 20)
-longWaitBox.Text = tostring(DEFAULT_LONG_WAIT)
-longWaitBox.PlaceholderText = "4.2"
-longWaitBox.TextScaled = true
-longWaitBox.Font = Enum.Font.GothamBold
-longWaitBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-longWaitBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-longWaitBox.ClearTextOnFocus = false
-longWaitBox.Parent = screenGui
-
-local cornerLongWaitBox = Instance.new("UICorner")
-cornerLongWaitBox.CornerRadius = UDim.new(0, 8)
-cornerLongWaitBox.Parent = longWaitBox
-
 longWaitBox.FocusLost:Connect(function()
     local num = tonumber(longWaitBox.Text)
     if num and num >= 0 then
@@ -218,102 +274,6 @@ longWaitBox.FocusLost:Connect(function()
         longWaitBox.Text = tostring(longWaitDuration)
     end
 end)
-
--- Toggle "Show Next Point" indicator
-local indicatorToggle = Instance.new("TextButton")
-indicatorToggle.Name = "IndicatorToggle"
-indicatorToggle.Size = UDim2.new(0, 180, 0, 45)
-indicatorToggle.Position = UDim2.new(0, 20, 0, 75)
-indicatorToggle.Text = "Show Next Point: OFF"
-indicatorToggle.TextScaled = true
-indicatorToggle.Font = Enum.Font.GothamBold
-indicatorToggle.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
-indicatorToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-indicatorToggle.Parent = screenGui
-
-local cornerToggle = Instance.new("UICorner")
-cornerToggle.CornerRadius = UDim.new(0, 8)
-cornerToggle.Parent = indicatorToggle
-
--- Toggle Autoclicker
-local autoClickerToggle = Instance.new("TextButton")
-autoClickerToggle.Name = "AutoClickerToggle"
-autoClickerToggle.Size = UDim2.new(0, 180, 0, 45)
-autoClickerToggle.Position = UDim2.new(0, 210, 0, 75)
-autoClickerToggle.Text = "Autoclicker: OFF"
-autoClickerToggle.TextScaled = true
-autoClickerToggle.Font = Enum.Font.GothamBold
-autoClickerToggle.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
-autoClickerToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-autoClickerToggle.Parent = screenGui
-
-local cornerAutoClicker = Instance.new("UICorner")
-cornerAutoClicker.CornerRadius = UDim.new(0, 8)
-cornerAutoClicker.Parent = autoClickerToggle
-
--- Status label
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Name = "StatusLabel"
-statusLabel.Size = UDim2.new(0, 400, 0, 40)
-statusLabel.Position = UDim2.new(0, 20, 0, 185)
-statusLabel.Text = "Status: Idle"
-statusLabel.TextScaled = true
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-statusLabel.BackgroundTransparency = 0.3
-statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-statusLabel.Parent = screenGui
-
-local cornerLabel = Instance.new("UICorner")
-cornerLabel.CornerRadius = UDim.new(0, 8)
-cornerLabel.Parent = statusLabel
-
-----------------------------------------------------------------
--- AUTOCLICKER PANEL (target reticle draggable + interval input)
-----------------------------------------------------------------
-local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-
-local autoClickerPanel = Instance.new("Frame")
-autoClickerPanel.Name = "AutoClickerPanel"
-autoClickerPanel.Size = UDim2.new(0, 220, 0, 90)
-autoClickerPanel.Position = UDim2.new(0, 210, 0, 130)
-autoClickerPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-autoClickerPanel.BackgroundTransparency = 0.3
-autoClickerPanel.Visible = false
-autoClickerPanel.Parent = screenGui
-
-local cornerAutoPanel = Instance.new("UICorner")
-cornerAutoPanel.CornerRadius = UDim.new(0, 8)
-cornerAutoPanel.Parent = autoClickerPanel
-
-local intervalLabel = Instance.new("TextLabel")
-intervalLabel.Name = "IntervalCaption"
-intervalLabel.Size = UDim2.new(0, 120, 0, 35)
-intervalLabel.Position = UDim2.new(0, 10, 0, 10)
-intervalLabel.Text = "Interval (s):"
-intervalLabel.TextScaled = true
-intervalLabel.Font = Enum.Font.Gotham
-intervalLabel.BackgroundTransparency = 1
-intervalLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-intervalLabel.Parent = autoClickerPanel
-
-local intervalBox = Instance.new("TextBox")
-intervalBox.Name = "IntervalInput"
-intervalBox.Size = UDim2.new(0, 70, 0, 35)
-intervalBox.Position = UDim2.new(0, 140, 0, 10)
-intervalBox.Text = tostring(clickInterval)
-intervalBox.PlaceholderText = "0.1"
-intervalBox.TextScaled = true
-intervalBox.Font = Enum.Font.GothamBold
-intervalBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-intervalBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-intervalBox.ClearTextOnFocus = false
-intervalBox.Parent = autoClickerPanel
-
-local cornerIntervalBox = Instance.new("UICorner")
-cornerIntervalBox.CornerRadius = UDim.new(0, 6)
-cornerIntervalBox.Parent = intervalBox
 
 intervalBox.FocusLost:Connect(function()
     local num = tonumber(intervalBox.Text)
@@ -325,128 +285,8 @@ intervalBox.FocusLost:Connect(function()
     end
 end)
 
-local clickCountLabel = Instance.new("TextLabel")
-clickCountLabel.Name = "ClickCountLabel"
-clickCountLabel.Size = UDim2.new(0, 200, 0, 30)
-clickCountLabel.Position = UDim2.new(0, 10, 0, 50)
-clickCountLabel.Text = "Clicks: 0"
-clickCountLabel.TextScaled = true
-clickCountLabel.Font = Enum.Font.Gotham
-clickCountLabel.BackgroundTransparency = 1
-clickCountLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-clickCountLabel.Parent = autoClickerPanel
-
--- Target reticle (draggable)
-local reticle = Instance.new("Frame")
-reticle.Name = "AutoClickTarget"
-reticle.Size = UDim2.new(0, 50, 0, 50)
-reticle.Position = UDim2.new(0.5, -25, 0.5, -25)
-reticle.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-reticle.BackgroundTransparency = 0.4
-reticle.Visible = false
-reticle.ZIndex = 10
-reticle.Parent = screenGui
-
-local reticleCorner = Instance.new("UICorner")
-reticleCorner.CornerRadius = UDim.new(1, 0) -- bulat
-reticleCorner.Parent = reticle
-
-local reticleStroke = Instance.new("UIStroke")
-reticleStroke.Thickness = 3
-reticleStroke.Color = Color3.fromRGB(255, 255, 255)
-reticleStroke.Parent = reticle
-
-local reticleDot = Instance.new("Frame")
-reticleDot.Size = UDim2.new(0, 8, 0, 8)
-reticleDot.Position = UDim2.new(0.5, -4, 0.5, -4)
-reticleDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-reticleDot.ZIndex = 11
-reticleDot.Parent = reticle
-
-local reticleDotCorner = Instance.new("UICorner")
-reticleDotCorner.CornerRadius = UDim.new(1, 0)
-reticleDotCorner.Parent = reticleDot
-
--- Drag logic buat reticle
-local dragging = false
-local dragInput = nil
-local dragStart = nil
-local startPos = nil
-
-reticle.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = reticle.Position
-
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-
-reticle.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        reticle.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
--- Loop autoclicker: kirim klik mouse ke posisi reticle tiap `clickInterval`
-local autoClickRunId = 0
-local totalClicks = 0
-
-local function getReticleScreenPosition()
-    local absPos = reticle.AbsolutePosition
-    local absSize = reticle.AbsoluteSize
-    return absPos + absSize / 2 -- titik tengah reticle
-end
-
-local function runAutoClicker(thisRunId)
-    totalClicks = 0
-    while autoClickerOn and thisRunId == autoClickRunId do
-        local pos = getReticleScreenPosition()
-        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-        totalClicks += 1
-        clickCountLabel.Text = "Clicks: " .. totalClicks
-        task.wait(clickInterval)
-    end
-end
-
-autoClickerToggle.MouseButton1Click:Connect(function()
-    autoClickerOn = not autoClickerOn
-    autoClickerToggle.Text = "Autoclicker: " .. (autoClickerOn and "ON" or "OFF")
-    autoClickerToggle.BackgroundColor3 = autoClickerOn
-        and Color3.fromRGB(30, 90, 40)
-        or Color3.fromRGB(80, 30, 30)
-
-    autoClickerPanel.Visible = autoClickerOn
-    reticle.Visible = autoClickerOn
-
-    if autoClickerOn then
-        autoClickRunId += 1
-        task.spawn(runAutoClicker, autoClickRunId)
-    else
-        autoClickRunId += 1 -- invalidate loop lama
-    end
-end)
-
 ----------------------------------------------------------------
--- NEXT-POINT INDICATOR (beam + marker)
+-- NEXT-POINT INDICATOR (beam + marker) -- di luar panel, tampil di world
 ----------------------------------------------------------------
 local indicatorFolder = Instance.new("Folder")
 indicatorFolder.Name = "PathIndicatorFolder"
@@ -461,13 +301,13 @@ markerPart.CanCollide = false
 markerPart.CanQuery = false
 markerPart.Material = Enum.Material.Neon
 markerPart.Color = Color3.fromRGB(255, 200, 0)
-markerPart.Transparency = 1 -- disembunyikan default
+markerPart.Transparency = 1
 markerPart.Parent = indicatorFolder
 
 local markerAttachment = Instance.new("Attachment")
 markerAttachment.Parent = markerPart
 
-local sourceAttachment = nil -- dipasang ke HRP saat character ada
+local sourceAttachment = nil
 
 local beam = Instance.new("Beam")
 beam.Name = "NextPointBeam"
@@ -507,6 +347,119 @@ indicatorToggle.MouseButton1Click:Connect(function()
         and Color3.fromRGB(30, 90, 40)
         or Color3.fromRGB(80, 30, 30)
     setIndicatorVisible(showIndicator)
+end)
+
+----------------------------------------------------------------
+-- AUTOCLICKER: target reticle draggable (di luar panel, biar bebas digeser)
+----------------------------------------------------------------
+local reticle = Instance.new("Frame")
+reticle.Name = "AutoClickTarget"
+reticle.AnchorPoint = Vector2.new(0.5, 0.5)
+reticle.Size = UDim2.new(0, 50, 0, 50)
+reticle.Position = UDim2.new(0.5, 0, 0.5, 0)
+reticle.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+reticle.BackgroundTransparency = 0.4
+reticle.Visible = false
+reticle.ZIndex = 95
+reticle.Parent = screenGui
+
+local reticleCorner = Instance.new("UICorner")
+reticleCorner.CornerRadius = UDim.new(1, 0)
+reticleCorner.Parent = reticle
+
+local reticleStroke = Instance.new("UIStroke")
+reticleStroke.Thickness = 3
+reticleStroke.Color = Color3.fromRGB(255, 255, 255)
+reticleStroke.Parent = reticle
+
+local reticleDot = Instance.new("Frame")
+reticleDot.Size = UDim2.new(0, 8, 0, 8)
+reticleDot.Position = UDim2.new(0.5, -4, 0.5, -4)
+reticleDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+reticleDot.ZIndex = 96
+reticleDot.Parent = reticle
+
+local reticleDotCorner = Instance.new("UICorner")
+reticleDotCorner.CornerRadius = UDim.new(1, 0)
+reticleDotCorner.Parent = reticleDot
+
+-- Drag logic buat reticle (support mouse & touch)
+local dragging = false
+local dragInput = nil
+local dragStart = nil
+local startPos = nil
+
+local function updateDrag(input)
+    local delta = input.Position - dragStart
+    reticle.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
+
+reticle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = reticle.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+reticle.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        updateDrag(input)
+    end
+end)
+
+local autoClickRunId = 0
+local totalClicks = 0
+
+local function getReticleScreenPosition()
+    local absPos = reticle.AbsolutePosition
+    local absSize = reticle.AbsoluteSize
+    return absPos + absSize / 2
+end
+
+local function runAutoClicker(thisRunId)
+    totalClicks = 0
+    while autoClickerOn and thisRunId == autoClickRunId do
+        local pos = getReticleScreenPosition()
+        VirtualInputManager:SendTouchTap(pos, false)
+        totalClicks += 1
+        clickCountLabel.Text = "Clicks: " .. totalClicks
+        task.wait(clickInterval)
+    end
+end
+
+autoClickerToggle.MouseButton1Click:Connect(function()
+    autoClickerOn = not autoClickerOn
+    autoClickerToggle.Text = "Autoclicker: " .. (autoClickerOn and "ON" or "OFF")
+    autoClickerToggle.BackgroundColor3 = autoClickerOn
+        and Color3.fromRGB(30, 90, 40)
+        or Color3.fromRGB(80, 30, 30)
+
+    reticle.Visible = autoClickerOn
+
+    if autoClickerOn then
+        autoClickRunId += 1
+        task.spawn(runAutoClicker, autoClickRunId)
+    else
+        autoClickRunId += 1
+    end
 end)
 
 ----------------------------------------------------------------
@@ -573,7 +526,6 @@ local function runPathLoop(thisRunId)
             local isLongWait = waypoint[3]
             local waitTime = isLongWait and longWaitDuration or fixedWait
 
-            -- update indicator ke titik tujuan saat ini
             updateIndicatorTarget(targetPos)
 
             statusLabel.Text = string.format("Menuju titik %d/%d", i, #waypoints)
@@ -600,17 +552,17 @@ local function runPathLoop(thisRunId)
     end
 end
 
-button.MouseButton1Click:Connect(function()
+startButton.MouseButton1Click:Connect(function()
     if not isRunning then
         isRunning = true
         runId += 1
-        button.Text = "Stop Path"
+        startButton.Text = "Stop Path"
         statusLabel.Text = "Status: Starting..."
         task.spawn(runPathLoop, runId)
     else
         isRunning = false
         runId += 1
-        button.Text = "Start Path"
+        startButton.Text = "Start Path"
         statusLabel.Text = "Status: Stopping..."
 
         if bodyVelocity then
