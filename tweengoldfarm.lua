@@ -1,10 +1,10 @@
 -- LocalScript, taruh di StarterPlayerScripts
--- GUI dengan tombol Start/Stop Tween, character akan bergerak
--- mengikuti waypoint dengan speed setara jalan default (16 studs/detik),
--- lalu diam sesuai durasi tiap titik, dan repeat (loop) terus menerus.
+-- GUI dengan tombol Start/Stop dan input custom speed.
+-- Character digerakkan pakai BodyVelocity (physics-based, tetap collide
+-- dengan dunia) mengikuti waypoint, diam sesuai durasi tiap titik, lalu loop.
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 
@@ -15,7 +15,8 @@ local waypoints = {
     {Vector3.new(-145.35, -34.47, -161.18), 4.0},
     {Vector3.new(-111.17, -26.47, -188.23), 4.0},
     {Vector3.new(-128.69, -35.00, -183.10), 0.2},
-    {Vector3.new(-135.87, -7.03, -205.82), 4.0},
+    {Vector3.new(-141.02, -11.87, -188.26), 0.1},
+    {Vector3.new(-126.94, -7.79, -206.08), 4.0},
     {Vector3.new(-126.00, -3.75, -215.39), 0.1},
     {Vector3.new(223.61, -3.00, -204.31), 0.1},
     {Vector3.new(461.60, 16.56, 142.94), 0.1},
@@ -87,22 +88,23 @@ local waypoints = {
     {Vector3.new(-122.10, -36.63, -129.21), 0.1},
 }
 
-local DEFAULT_SPEED = 16 -- studs/detik, sama kayak default WalkSpeed
-local currentSpeed = DEFAULT_SPEED -- bisa diubah lewat GUI
+local DEFAULT_SPEED = 16 -- studs/detik
+local currentSpeed = DEFAULT_SPEED
+local ARRIVE_THRESHOLD = 1.5 -- jarak (studs) dianggap "sampai" di titik
 
 ----------------------------------------------------------------
 -- GUI
 ----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "TweenPathGui"
+screenGui.Name = "BodyVelocityPathGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local button = Instance.new("TextButton")
-button.Name = "StartTweenButton"
+button.Name = "StartButton"
 button.Size = UDim2.new(0, 180, 0, 50)
 button.Position = UDim2.new(0, 20, 0, 20)
-button.Text = "Start Tween"
+button.Text = "Start Path"
 button.TextScaled = true
 button.Font = Enum.Font.GothamBold
 button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
@@ -113,7 +115,6 @@ local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 8)
 corner.Parent = button
 
--- Input custom speed
 local speedLabel = Instance.new("TextLabel")
 speedLabel.Name = "SpeedCaption"
 speedLabel.Size = UDim2.new(0, 90, 0, 50)
@@ -147,14 +148,12 @@ local cornerSpeedBox = Instance.new("UICorner")
 cornerSpeedBox.CornerRadius = UDim.new(0, 8)
 cornerSpeedBox.Parent = speedBox
 
--- Validasi & update speed setiap kali player selesai ngetik (Enter / lost focus)
 speedBox.FocusLost:Connect(function()
     local num = tonumber(speedBox.Text)
     if num and num > 0 then
         currentSpeed = num
         speedBox.Text = tostring(num)
     else
-        -- input gak valid, balikin ke speed yang lagi aktif
         speedBox.Text = tostring(currentSpeed)
     end
 end)
@@ -176,11 +175,12 @@ cornerLabel.CornerRadius = UDim.new(0, 8)
 cornerLabel.Parent = statusLabel
 
 ----------------------------------------------------------------
--- TWEEN LOGIC
+-- MOVEMENT LOGIC (BodyVelocity)
 ----------------------------------------------------------------
 local isRunning = false
-local currentTween = nil
-local runId = 0 -- dipakai buat cancel loop lama kalau tombol ditekan lagi
+local runId = 0
+local bodyVelocity = nil
+local heartbeatConn = nil
 
 local function getCharacterParts()
     local character = player.Character or player.CharacterAdded:Wait()
@@ -189,11 +189,48 @@ local function getCharacterParts()
     return character, hrp, humanoid
 end
 
-local function runTweenLoop(thisRunId)
+local function createBodyVelocity(hrp)
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "PathBodyVelocity"
+    bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
+    bv.Velocity = Vector3.zero
+    bv.P = 1250
+    bv.Parent = hrp
+    return bv
+end
+
+local function moveToPoint(hrp, targetPos, thisRunId)
+    -- gerakkan hrp menuju targetPos pakai BodyVelocity, update tiap Heartbeat
+    local reached = false
+
+    while isRunning and thisRunId == runId and not reached do
+        local currentPos = hrp.Position
+        local toTarget = targetPos - currentPos
+        local distance = toTarget.Magnitude
+
+        if distance <= ARRIVE_THRESHOLD then
+            bodyVelocity.Velocity = Vector3.zero
+            reached = true
+        else
+            local direction = toTarget.Unit
+            bodyVelocity.Velocity = direction * currentSpeed
+        end
+
+        RunService.Heartbeat:Wait()
+    end
+
+    if bodyVelocity then
+        bodyVelocity.Velocity = Vector3.zero
+    end
+end
+
+local function runPathLoop(thisRunId)
     local character, hrp, humanoid = getCharacterParts()
 
-    -- Anchor biar gerakan smooth, gak kena physics/collision aneh
-    hrp.Anchored = true
+    bodyVelocity = createBodyVelocity(hrp)
+    -- matikan physics gravity influence secukupnya? Tidak, biarkan gravity
+    -- tetap aktif secara vertikal karena kita hanya set velocity penuh 3D
+    -- menuju target termasuk sumbu Y (jadi karakter "terbang" mengikuti path).
 
     while isRunning and thisRunId == runId do
         for i, waypoint in ipairs(waypoints) do
@@ -202,27 +239,8 @@ local function runTweenLoop(thisRunId)
             local targetPos = waypoint[1]
             local waitTime = waypoint[2]
 
-            local currentPos = hrp.Position
-            local distance = (targetPos - currentPos).Magnitude
-            local duration = distance / currentSpeed
-
-            if duration > 0 then
-                local tweenInfo = TweenInfo.new(
-                    duration,
-                    Enum.EasingStyle.Linear,
-                    Enum.EasingDirection.InOut
-                )
-                local targetCFrame = CFrame.new(targetPos, targetPos + (targetPos - currentPos))
-                -- pertahankan rotasi menghadap arah gerak (opsional, bisa dihapus kalau gak perlu)
-                local goalCFrame = CFrame.new(targetPos)
-
-                currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = goalCFrame})
-                currentTween:Play()
-
-                statusLabel.Text = string.format("Menuju titik %d/%d", i, #waypoints)
-
-                currentTween.Completed:Wait()
-            end
+            statusLabel.Text = string.format("Menuju titik %d/%d", i, #waypoints)
+            moveToPoint(hrp, targetPos, thisRunId)
 
             if not isRunning or thisRunId ~= runId then break end
 
@@ -231,11 +249,14 @@ local function runTweenLoop(thisRunId)
                 task.wait(waitTime)
             end
         end
-        -- selesai satu putaran, balik ke awal (loop)
+    end
+
+    if bodyVelocity then
+        bodyVelocity:Destroy()
+        bodyVelocity = nil
     end
 
     if thisRunId == runId then
-        hrp.Anchored = false
         statusLabel.Text = "Status: Idle"
     end
 end
@@ -244,22 +265,18 @@ button.MouseButton1Click:Connect(function()
     if not isRunning then
         isRunning = true
         runId += 1
-        button.Text = "Stop Tween"
+        button.Text = "Stop Path"
         statusLabel.Text = "Status: Starting..."
-        task.spawn(runTweenLoop, runId)
+        task.spawn(runPathLoop, runId)
     else
         isRunning = false
-        runId += 1 -- invalidate loop yang sedang jalan
-        button.Text = "Start Tween"
+        runId += 1
+        button.Text = "Start Path"
         statusLabel.Text = "Status: Stopping..."
 
-        -- unanchor manual kalau lagi di tengah tween
-        local character = player.Character
-        if character then
-            local hrp = character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                hrp.Anchored = false
-            end
+        if bodyVelocity then
+            bodyVelocity:Destroy()
+            bodyVelocity = nil
         end
     end
 end)
