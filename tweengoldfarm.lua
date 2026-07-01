@@ -73,6 +73,7 @@ local waypoints = {
     {Vector3.new(-175.88, -63.80, -553.14), 0.01, false},
     {Vector3.new(-164.27, -63.02, -521.57), 0.01, false},
     {Vector3.new(-190.30, -66.24, -464.96), 0.01, false},
+    {Vector3.new(-166.16, -98.18, -452.94), 0.01, false},
     {Vector3.new(-91.88, -103.00, -425.60), 0.01, false},
     {Vector3.new(-50.10, -103.00, -430.36), 0.01, false},
     {Vector3.new(18.88, -99.85, -411.12), 0.01, false},
@@ -270,7 +271,7 @@ local indicatorToggle = newButton(4, "Show Next Point: OFF", Color3.fromRGB(80, 
 local autoClickerPanelToggle = newButton(5, "Autoclicker Panel: OFF", Color3.fromRGB(60, 60, 30))
 local intervalBox = newLabeledInput(6, "Click Interval (s):", clickInterval)
 local activateClickerButton = newButton(7, "Activate Autoclicker", Color3.fromRGB(80, 30, 30))
-local clickCountLabel = newStatusLabel(8, "Clicks: 0")
+local goldsLabel = newStatusLabel(8, "Golds Earned: 0")
 
 local statusLabel = newStatusLabel(9, "Status: Idle")
 
@@ -611,7 +612,6 @@ local function runAutoClicker(thisRunId)
         local pos = getReticleScreenPosition()
         fireClickAt(pos)
         totalClicks += 1
-        clickCountLabel.Text = "Clicks: " .. totalClicks
         task.wait(clickInterval)
     end
 end
@@ -646,6 +646,7 @@ end)
 local isRunning = false
 local runId = 0
 local bodyVelocity = nil
+local totalGolds = 0
 
 local function getCharacterParts()
     local character = player.Character or player.CharacterAdded:Wait()
@@ -714,6 +715,11 @@ local function runPathLoop(thisRunId)
             if waitTime and waitTime > 0 then
                 statusLabel.Text = string.format("Diam di titik %d/%d (%.1fs)", i, #waypoints, waitTime)
                 task.wait(waitTime)
+            end
+
+            if isLongWait then
+                totalGolds += 6
+                goldsLabel.Text = "Golds Earned: " .. totalGolds
             end
         end
     end
